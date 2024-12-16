@@ -1,0 +1,116 @@
+main.tf:-
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_elasticache_cluster" "redis" {
+  cluster_id           = "redis-cluster"
+  engine               = "redis"
+  node_type            = "cache.t2.micro"
+  num_cache_nodes      = 1
+  parameter_group_name = "default.redis6.x"
+}
+
+resource "aws_rds_instance" "sql_db" {
+  identifier              = "my-sql-db"
+  allocated_storage       = 20
+  engine                  = "mysql"
+  instance_class          = "db.t2.micro"
+  name                    = "app_db"
+  username                = "admin"
+  password                = "secure_password"
+  publicly_accessible     = false
+  skip_final_snapshot     = true
+}
+
+output "redis_endpoint" {
+  value = aws_elasticache_cluster.redis.cache_nodes[0].address
+}
+
+output "db_endpoint" {
+  value = aws_rds_instance.sql_db.endpoint
+}
+
+
+
+
+variables.tf:-
+
+
+variable "aws_region" {
+  default = "us-east-1"
+}
+
+variable "db_password" {
+  description = "Database password"
+  type        = string
+}
+
+
+outputs.tf:-
+
+output "redis_endpoint" {
+  description = "Redis cache endpoint"
+  value       = aws_elasticache_cluster.redis.cache_nodes[0].address
+}
+
+output "rds_endpoint" {
+  description = "SQL database endpoint"
+  value       = aws_rds_instance.sql_db.endpoint
+}
+
+
+
+Yaml code:-
+name: Terraform CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  terraform:
+    name: Terraform Plan and Apply
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # Step 2: Setup Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.6.0
+
+      # Step 3: Initialize Terraform
+      - name: Terraform Init
+        run: terraform init
+
+      # Step 4: Validate Terraform Code
+      - name: Terraform Validate
+        run: terraform validate
+
+      # Step 5: Plan Terraform Changes
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
+
+      # Step 6: Apply Terraform Changes (on push to main)
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main'
+        run: terraform apply -auto-approve tfplan
+
+
+
+
+backend.tf:-
+terraform {
+  backend "s3" {
+    bucket         = "my-terraform-state"
+    key            = "terraform/state.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "terraform-lock-table"
+  }
+}
